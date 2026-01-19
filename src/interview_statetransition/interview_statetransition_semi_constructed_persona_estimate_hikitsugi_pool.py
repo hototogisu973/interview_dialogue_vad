@@ -6,6 +6,9 @@
 # 設定セクション
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
+# osモジュールを先にインポート（パス設定で必要）
+import os
+
 # モデルの設定
 MODEL_NAME = "gpt-4o-2024-11-20"
 TEMPERATURE = 0
@@ -13,25 +16,34 @@ TEMPERATURE = 0
 # 待機時間
 WAIT_TIME = 5
 
-# プロンプトの設定
-PROMPT_IDLE_TALK_PATH = "/mnt/work/interview/data/hashimoto-nakano/prompt_semi_const/proposed_method/prompt_idle_talk.txt"
-PROMPT_FILL_SLOTS_PATH = "/mnt/work/interview/data/hashimoto-nakano/prompt_semi_const/proposed_method/prompt_fill_slots.txt"
-PROMPT_GENERATE_SLOTS_PATH = "/mnt/work/interview/data/hashimoto-nakano/prompt_semi_const/proposed_method/prompt_generate_slots_fukabori.txt"
-PROMPT_GENERATE_SLOTS_2_PATH = "/mnt/work/interview/data/hashimoto-nakano/prompt_semi_const/proposed_method/prompt_generate_slots_2.txt"
-PROMPT_GENERATE_QUESTIONS_PATH = "/mnt/work/interview/data/hashimoto-nakano/prompt_semi_const/proposed_method/prompt_generating_question.txt"
-PROMPT_USER_SIMULATOR_PATH = "/mnt/work/interview/data/hashimoto-nakano/prompt_semi_const/proposed_method/prompt_user_simulator.txt"
-PROMPT_CAREER_TOPIC_PATH = "/mnt/work/interview/data/hashimoto-nakano/prompt_semi_const/proposed_method/prompt_career_topic.txt"
-PROMPT_END_CONVERSATION_PATH = "/mnt/work/interview/data/hashimoto-nakano/prompt_semi_const/proposed_method/prompt_end_conversation.txt"
+# プロジェクトルートの取得（__file__を基準に）
+_project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__))) if "__file__" in globals() else os.getcwd()
 
-PROMPT_ESTIMATE_PERSONA_PATH = "/mnt/work/interview/data/hashimoto-nakano/prompt_semi_const/proposed_method/prompt_estimate_persona.txt"
+# Docker環境用のパス（/mnt/work/interview/）が存在する場合は優先
+_docker_data_root = "/mnt/work/interview/data"
+if os.path.exists(_docker_data_root):
+    _data_root = _docker_data_root
+else:
+    # 通常のローカル環境ではプロジェクトルート基準
+    _data_root = os.path.join(_project_root, "data")
+
+# プロンプトの設定
+PROMPT_IDLE_TALK_PATH = os.path.join(_data_root, "hashimoto-nakano/prompt_semi_const/proposed_method/prompt_idle_talk.txt")
+PROMPT_FILL_SLOTS_PATH = os.path.join(_data_root, "hashimoto-nakano/prompt_semi_const/proposed_method/prompt_fill_slots.txt")
+PROMPT_GENERATE_SLOTS_PATH = os.path.join(_data_root, "hashimoto-nakano/prompt_semi_const/proposed_method/prompt_generate_slots_fukabori.txt")
+PROMPT_GENERATE_SLOTS_2_PATH = os.path.join(_data_root, "hashimoto-nakano/prompt_semi_const/proposed_method/prompt_generate_slots_2.txt")
+PROMPT_GENERATE_QUESTIONS_PATH = os.path.join(_data_root, "hashimoto-nakano/prompt_semi_const/proposed_method/prompt_generating_question.txt")
+PROMPT_USER_SIMULATOR_PATH = os.path.join(_data_root, "hashimoto-nakano/prompt_semi_const/proposed_method/prompt_user_simulator.txt")
+PROMPT_CAREER_TOPIC_PATH = os.path.join(_data_root, "hashimoto-nakano/prompt_semi_const/proposed_method/prompt_career_topic.txt")
+PROMPT_END_CONVERSATION_PATH = os.path.join(_data_root, "hashimoto-nakano/prompt_semi_const/proposed_method/prompt_end_conversation.txt")
+
+PROMPT_ESTIMATE_PERSONA_PATH = os.path.join(_data_root, "hashimoto-nakano/prompt_semi_const/proposed_method/prompt_estimate_persona.txt")
 
 # ユーザシミュレータのpersona設定
-PERSONA_SETTINGS_PATH = "/mnt/work/interview/data/hashimoto-nakano/persona_settings/hasegawa_data/hasegawa_p.txt"
+PERSONA_SETTINGS_PATH = os.path.join(_data_root, "hashimoto-nakano/persona_settings/hasegawa_data/hasegawa_p.txt")
 
 # 自己評価アンケート
-SELF_EVALUATION_PATH = (
-    "/mnt/work/interview/data/hashimoto-nakano/questionnaire/endo_q.json"
-)
+SELF_EVALUATION_PATH = os.path.join(_data_root, "hashimoto-nakano/questionnaire/endo_q.json")
 
 # INTERVIEW_CONFIG（初期状態）の定義
 # "value":\s*"[^"]*"   でスロットの値を抽出
@@ -142,7 +154,6 @@ INTERVIEW_CONFIG = {
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
 
-import os
 import json
 import datetime
 import time
@@ -165,33 +176,6 @@ from pydantic import BaseModel, Field, RootModel
 # 必要な環境変数を設定
 os.environ["LANGCHAIN_TRACING_V2"] = "false"
 
-# .envファイルから環境変数を読み込む（オプション）
-try:
-    from dotenv import load_dotenv
-    # プロジェクトルートから.envファイルを探す（存在する場合のみ読み込み）
-    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
-    if os.path.exists(env_path):
-        load_dotenv(env_path)
-    # カレントディレクトリの.envも確認
-    if os.path.exists(".env"):
-        load_dotenv(".env")
-    # /mnt/work/interview/.envも確認（Docker環境などで使用）
-    docker_env_path = "/mnt/work/interview/.env"
-    if os.path.exists(docker_env_path):
-        load_dotenv(docker_env_path)
-except ImportError:
-    # python-dotenvがインストールされていない場合はスキップ
-    pass
-
-# OPENAI_API_KEYの確認と設定
-if "OPENAI_API_KEY" not in os.environ:
-    raise ValueError(
-        "OPENAI_API_KEY環境変数が設定されていません。\n"
-        "以下のいずれかの方法で設定してください:\n"
-        "1. 環境変数として設定: export OPENAI_API_KEY='your-api-key'\n"
-        "2. .envファイルを使用: プロジェクトルートに.envファイルを作成し、OPENAI_API_KEY=your-api-key を記述\n"
-        "3. コード内で設定（セキュリティ上推奨されません）: os.environ['OPENAI_API_KEY'] = 'your-api-key'"
-    )
 
 # ic.enable()
 # ic.disable()
