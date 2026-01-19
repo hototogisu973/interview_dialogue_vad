@@ -1300,7 +1300,7 @@ graph = graph_builder.compile()
 
 
 # CLIモードとUIモードを切り替え
-RUN_MODE = os.getenv("RUN_MODE", "cli")  # "cli" または "ui"
+RUN_MODE = os.getenv("RUN_MODE", "ui")  # "cli" または "ui"
 
 if RUN_MODE == "cli":
     # CLIモード: グラフを自動実行
@@ -1347,10 +1347,12 @@ else:
     # パスの設定
     project_root = Path(__file__).parent.parent.parent
     asr_path = project_root / "Realtime_ASR_FasterWhisper_Gradio-main"
+    src_path = project_root / "src"
     
-    # プロジェクトルートをsys.pathに追加（core.tts_outputなどのインポート用）
-    if str(project_root) not in sys.path:
-        sys.path.insert(0, str(project_root))
+    # srcディレクトリをsys.pathに追加（core.tts_outputなどのインポート用）
+    src_path_str = str(src_path.resolve())  # 絶対パスに変換
+    if src_path_str not in sys.path:
+        sys.path.insert(0, src_path_str)
     
     # Realtime_ASR_FasterWhisper_Gradio-mainのパスを追加
     if str(asr_path) not in sys.path:
@@ -1390,8 +1392,21 @@ else:
     SessionStore = asr_core_session_store.SessionStore
     StreamingState = asr_core_session_store.StreamingState
     
-    # TTSProcessorのインポート（音声合成はそのまま）- プロジェクトルートのcore/tts_output.pyから
-    from core.tts_output import TTSProcessor
+    # TTSProcessorのインポート（動的インポート）- src/core/tts_output.pyから
+    tts_output_path = src_path / "core" / "tts_output.py"
+    if not tts_output_path.exists():
+        raise FileNotFoundError(f"TTSProcessorモジュールが見つかりません: {tts_output_path}")
+    
+    import importlib.util
+    tts_output_spec = importlib.util.spec_from_file_location(
+        "core.tts_output",
+        tts_output_path
+    )
+    tts_output_module = importlib.util.module_from_spec(tts_output_spec)
+    # sys.modulesに登録してからexec_module（他のモジュールからの参照に対応）
+    sys.modules["core.tts_output"] = tts_output_module
+    tts_output_spec.loader.exec_module(tts_output_module)
+    TTSProcessor = tts_output_module.TTSProcessor
     
     # TTSProcessorの初期化
     try:
