@@ -9,7 +9,7 @@ from style_bert_vits2.constants import Languages
 class TTSProcessor:
     def __init__(
         self, 
-        model_root_dir: Union[str, Path] = Path("/home/usr23/n_sakaguchi/graph_chatUI/models/assets")
+        model_root_dir: Union[str, Path] = Path("/mnt/work/interview/models/assets")
     ):
         """
         TTSプロセッサーの初期化
@@ -22,7 +22,7 @@ class TTSProcessor:
         self.current_model_path = None
 
         # BERTモデルを明示的にロード
-        bert_path = "/home/usr23/n_sakaguchi/graph_chatUI/bert/deberta-v2-large-japanese-char-wwm"
+        bert_path = "/mnt/work/graph_chatUI/bert/deberta-v2-large-japanese-char-wwm"
         load_model(Languages.JP, pretrained_model_name_or_path=bert_path)
         load_tokenizer(Languages.JP, pretrained_model_name_or_path=bert_path)
 
