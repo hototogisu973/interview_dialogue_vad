@@ -1457,9 +1457,8 @@ else:
             )
             
             # 最終的なテキストが確定した場合のみ返す
+            # セッションをリセットしない（次の発話でもセッションを継続使用）
             if is_final and accumulated_text:
-                # セッションをリセット
-                asr_session_store.reset(asr_session_id)
                 return accumulated_text.strip()
             
             # 中間結果は返さない（最終結果のみ）
@@ -1669,6 +1668,7 @@ else:
                             label='マイク録音',
                             sources='microphone',
                             type='numpy',
+                            streaming=True,  # ストリーミングモードを有効化
                         )
                     
                     audio_out = gr.Audio(label="AIの応答", autoplay=True)
@@ -1678,21 +1678,27 @@ else:
                     asr_session_id_state = gr.State(value=None)  # ASRセッションIDを管理
                     
                     def transcribe_and_auto_submit(audio_input, current_msg, current_chat_history, current_cookie_id, last_text_state, asr_sess_id):
-                        """音声認識して自動送信"""
+                        """音声認識して自動送信（ストリーミング処理）"""
                         if audio_input is None:
                             return current_msg, current_chat_history, None, last_text_state, asr_sess_id
                         
                         try:
                             # セッションを取得してASRセッションIDを管理
                             sess = interface.get_or_create_session(current_cookie_id if current_cookie_id else "")
-                            if sess.asr_session_id is None:
-                                # 初回は新しいASRセッションを作成
-                                sess.asr_session_id, _ = asr_session_store.get_or_create(None)
+                            # セッションIDがstateから渡されていない場合は、セッションから取得または新規作成
+                            if asr_sess_id is None:
+                                if sess.asr_session_id is None:
+                                    sess.asr_session_id, _ = asr_session_store.get_or_create(None)
+                                asr_sess_id = sess.asr_session_id
+                            else:
+                                # stateから渡されたセッションIDを更新
+                                sess.asr_session_id = asr_sess_id
                             
                             # 音声認識（Realtime_ASR_FasterWhisper_Gradio-mainを使用）
-                            new_text = real_time_transcribe(audio_input, sess.asr_session_id)
+                            # ストリーミング処理なので、音声チャンクごとに呼ばれる
+                            new_text = real_time_transcribe(audio_input, asr_sess_id)
                             
-                            # 認識結果があって、前回と異なる場合は自動送信
+                            # 認識結果があって、前回と異なる場合は自動送信（is_final=Trueのときのみ）
                             if new_text and new_text.strip() and new_text != last_text_state:
                                 # 初回でない場合のみ自動送信
                                 if sess.initiated:
@@ -1706,7 +1712,8 @@ else:
                             import traceback
                             traceback.print_exc()
                         
-                        return current_msg, current_chat_history, None, last_text_state, asr_sess_id
+                        # セッションIDを返して状態を更新
+                        return current_msg, current_chat_history, None, last_text_state, sess.asr_session_id if sess.asr_session_id else asr_sess_id
                     
                     def initialize_chat():
                         """ページロード時にアイスブレイクを実行"""
@@ -1731,11 +1738,12 @@ else:
                         outputs=[msg, chatbot, audio_out]
                     )
                     
-                    # 音声認識と自動送信
-                    mic.change(
+                    # 音声認識と自動送信（ストリーミング処理）
+                    mic.stream(
                         fn=transcribe_and_auto_submit,
                         inputs=[mic, msg, chatbot, cookie_id, last_transcribed_text, asr_session_id_state],
-                        outputs=[msg, chatbot, audio_out, last_transcribed_text, asr_session_id_state]
+                        outputs=[msg, chatbot, audio_out, last_transcribed_text, asr_session_id_state],
+                        stream_every=0.3  # 0.3秒ごとに音声チャンクを処理
                     )
                     
                     # ページロード時に初期化（初回アイスブレイク）

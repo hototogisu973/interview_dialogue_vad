@@ -39,25 +39,6 @@ def _parse_bool(value: Optional[str]) -> bool:
     return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
-@app.get("/")
-async def root():
-    """ルートエンドポイント - API情報を返す"""
-    return {
-        "service": "Realtime ASR FasterWhisper Service",
-        "version": "0.1.0",
-        "status": "running",
-        "endpoints": {
-            "health": "/health",
-            "stream": "/stream",
-            "vad": "/vad",
-            "transcribe": "/transcribe",
-            "session_reset": "/session/reset",
-            "docs": "/docs",
-            "redoc": "/redoc"
-        }
-    }
-
-
 @app.get("/health")
 async def health():
     return {"status": "ok"}
