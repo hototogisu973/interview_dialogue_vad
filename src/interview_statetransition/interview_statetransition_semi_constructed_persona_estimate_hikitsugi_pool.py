@@ -1363,6 +1363,8 @@ else:
         asr_path / "core" / "processor.py"
     )
     asr_core_processor = importlib.util.module_from_spec(processor_spec)
+    # sys.modulesに登録してからexec_module（dataclassデコレータが正しく動作するために必要）
+    sys.modules["asr_core_processor"] = asr_core_processor
     processor_spec.loader.exec_module(asr_core_processor)
     
     config_spec = importlib.util.spec_from_file_location(
@@ -1370,6 +1372,8 @@ else:
         asr_path / "core" / "config.py"
     )
     asr_core_config = importlib.util.module_from_spec(config_spec)
+    # sys.modulesに登録してからexec_module
+    sys.modules["asr_core_config"] = asr_core_config
     config_spec.loader.exec_module(asr_core_config)
     
     session_store_spec = importlib.util.spec_from_file_location(
@@ -1377,6 +1381,8 @@ else:
         asr_path / "core" / "session_store.py"
     )
     asr_core_session_store = importlib.util.module_from_spec(session_store_spec)
+    # sys.modulesに登録してからexec_module（dataclassデコレータが正しく動作するために必要）
+    sys.modules["asr_core_session_store"] = asr_core_session_store
     session_store_spec.loader.exec_module(asr_core_session_store)
     
     StreamingAudioProcessor = asr_core_processor.StreamingAudioProcessor
