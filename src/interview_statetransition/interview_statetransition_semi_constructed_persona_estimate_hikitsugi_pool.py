@@ -1427,6 +1427,25 @@ else:
     # StreamingAudioProcessorの初期化
     try:
         streaming_config = StreamingConfig()
+        
+        # VAD設定を調整（必要に応じて変更可能）
+        # 環境変数で設定されていない場合は、ここで直接変更できます
+        # 注意: StreamingConfigはfrozen dataclassなので、以下のように環境変数を設定してから作成する必要があります
+        if "VAD_THRESHOLD" not in os.environ:
+            os.environ["VAD_THRESHOLD"] = "0.5"  # より低い閾値で発話を検出しやすく
+        if "MIN_SPEECH_DURATION_MS" not in os.environ:
+            os.environ["MIN_SPEECH_DURATION_MS"] = "250"  # より短い発話でも検出
+        if "MIN_SILENCE_DURATION_MS" not in os.environ:
+            os.environ["MIN_SILENCE_DURATION_MS"] = "400"  # より短い無音で確定
+        if "STREAMING_AUDIO_DEBUG" not in os.environ:
+            os.environ["STREAMING_AUDIO_DEBUG"] = "1"  # デバッグ出力を有効化
+        
+        # 設定を再読み込み
+        streaming_config = StreamingConfig()
+        
+        print(f"[ASR INIT] StreamingConfig: whisper_model_id={streaming_config.whisper_model_id}, language={streaming_config.language}")
+        print(f"[ASR INIT] VAD設定: vad_threshold={streaming_config.vad_threshold}, min_speech_duration_ms={streaming_config.min_speech_duration_ms}, min_silence_duration_ms={streaming_config.min_silence_duration_ms}")
+        print("[ASR INIT] StreamingAudioProcessorの初期化を開始します（Whisperモデルの読み込みには時間がかかる場合があります）...")
         streaming_processor = StreamingAudioProcessor(streaming_config)
         print("StreamingAudioProcessorの初期化に成功しました")
     except Exception as e:
@@ -1442,10 +1461,17 @@ else:
     def real_time_transcribe(new_chunk, asr_session_id=None):
         """Realtime_ASR_FasterWhisper_Gradio-mainを使用した音声認識"""
         try:
-            if new_chunk is None or streaming_processor is None:
+            if new_chunk is None:
+                print("[ASR DEBUG] new_chunk is None")
+                return ""
+            
+            if streaming_processor is None:
+                print("[ASR DEBUG] streaming_processor is None")
                 return ""
 
             sr, y = new_chunk
+            print(f"[ASR DEBUG] 音声チャンク受信: sr={sr}, shape={y.shape if hasattr(y, 'shape') else type(y)}")
+            
             if y.ndim > 1:
                 y = y.mean(axis=1)
             y = y.astype(np.float32)
@@ -1456,15 +1482,18 @@ else:
                 asr_state, y, int(sr)
             )
             
+            print(f"[ASR DEBUG] process_chunk結果: accumulated_text='{accumulated_text}', is_final={is_final}, session_id={asr_session_id}")
+            
             # 最終的なテキストが確定した場合のみ返す
             # セッションをリセットしない（次の発話でもセッションを継続使用）
             if is_final and accumulated_text:
+                print(f"[ASR DEBUG] 認識結果を返します: '{accumulated_text.strip()}'")
                 return accumulated_text.strip()
             
             # 中間結果は返さない（最終結果のみ）
             return ""
         except Exception as e:
-            print(f"real_time_transcribe エラー: {e}")
+            print(f"[ASR DEBUG] real_time_transcribe エラー: {e}")
             import traceback
             traceback.print_exc()
             return ""
@@ -1679,7 +1708,10 @@ else:
                     
                     def transcribe_and_auto_submit(audio_input, current_msg, current_chat_history, current_cookie_id, last_text_state, asr_sess_id):
                         """音声認識して自動送信（ストリーミング処理）"""
+                        print(f"[UI DEBUG] transcribe_and_auto_submit呼び出し: audio_input={audio_input is not None}, asr_sess_id={asr_sess_id}")
+                        
                         if audio_input is None:
+                            print("[UI DEBUG] audio_input is None - スキップ")
                             return current_msg, current_chat_history, None, last_text_state, asr_sess_id
                         
                         try:
@@ -1689,6 +1721,7 @@ else:
                             if asr_sess_id is None:
                                 if sess.asr_session_id is None:
                                     sess.asr_session_id, _ = asr_session_store.get_or_create(None)
+                                    print(f"[UI DEBUG] 新しいASRセッションを作成: {sess.asr_session_id}")
                                 asr_sess_id = sess.asr_session_id
                             else:
                                 # stateから渡されたセッションIDを更新
@@ -1698,8 +1731,11 @@ else:
                             # ストリーミング処理なので、音声チャンクごとに呼ばれる
                             new_text = real_time_transcribe(audio_input, asr_sess_id)
                             
+                            print(f"[UI DEBUG] 認識結果: new_text='{new_text}', last_text_state='{last_text_state}', sess.initiated={sess.initiated}")
+                            
                             # 認識結果があって、前回と異なる場合は自動送信（is_final=Trueのときのみ）
                             if new_text and new_text.strip() and new_text != last_text_state:
+                                print(f"[UI DEBUG] 自動送信を実行します: '{new_text}'")
                                 # 初回でない場合のみ自動送信
                                 if sess.initiated:
                                     result_msg, result_chat, result_audio = interface.process_message(new_text, current_chat_history, current_cookie_id if current_cookie_id else "")
@@ -1708,12 +1744,13 @@ else:
                                     # 初回の場合はテキストボックスに反映するだけ
                                     return new_text, current_chat_history, None, new_text, sess.asr_session_id
                         except Exception as e:
-                            print(f"音声認識・自動送信エラー: {e}")
+                            print(f"[UI DEBUG] 音声認識・自動送信エラー: {e}")
                             import traceback
                             traceback.print_exc()
                         
                         # セッションIDを返して状態を更新
-                        return current_msg, current_chat_history, None, last_text_state, sess.asr_session_id if sess.asr_session_id else asr_sess_id
+                        final_session_id = sess.asr_session_id if 'sess' in locals() and sess.asr_session_id else asr_sess_id
+                        return current_msg, current_chat_history, None, last_text_state, final_session_id
                     
                     def initialize_chat():
                         """ページロード時にアイスブレイクを実行"""
